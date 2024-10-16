@@ -85,10 +85,10 @@ La plataforma se basa en **Next.js** para la interfaz y utiliza **Clarity** como
    - Asegúrate de tener Stacks CLI instalado y configurado.
    - Despliega el contrato en la red de pruebas o en la red principal de Stacks:
      ```bash
-     clarity-cli deployment generate --testnet --low-cost
+     clarinet deployment generate --testnet --low-cost
      ```
      ```bash
-     clarity-cli deployment apply --testnet
+     clarinet deployment apply --testnet
      ```
 
 ## Licencia

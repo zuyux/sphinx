@@ -10,8 +10,14 @@
   },
   "dependencies": {
     "@next/font": "^14.2.15",
+    "@stacks/auth": "^6.16.1",
     "@stacks/connect": "^7.7.1",
+    "@stacks/network": "^6.16.0",
+    "@stacks/transactions": "^6.16.1",
+    "@stacks/wallet-sdk": "^6.16.1",
     "@supabase/supabase-js": "^2.45.4",
+    "axios": "^1.7.7",
+    "connect": "^3.7.0",
     "next": "14.2.15",
     "react": "^18",
     "react-dom": "^18"

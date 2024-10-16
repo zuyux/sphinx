@@ -113,15 +113,15 @@ export default function Home() {
       <div className="lg:w-1/2 mx-auto px-2 py-16">
         <div className="">
           <h1 className="text-lg font-bold">sphinx:</h1>
-          <h2 className="text-3xl mt-4 mb-8 sharetech">
+          <h2 className="text-3xl mt-4 mb-8 sharetech bg-white bg-opacity-5 border-[1px] border-[#f5f5f5] rounded-md p-4">
             Dada la creciente preocupación por el conflicto en Gaza y su impacto humanitario, ¿qué estrategias deberían adoptarse a nivel internacional para garantizar la seguridad de los civiles y lograr un cese al fuego efectivo?
           </h2>
           <p><b>Contexto:</b> El conflicto en Gaza ha escalado dramáticamente en el último año, resultando en decenas de miles de muertes y desplazamientos masivos, con más del 90% de la población en Gaza forzada a abandonar sus hogares. La situación ha generado una crisis humanitaria que exige la atención de la comunidad internacional.</p>
-          <button className="border-[1px] border-[#f1f1f1] rounded-md px-4 py-4 my-8 w-full hover:bg-white hover:text-[#702809]">Responder</button>
+          <Link href="/quest/ST28B2GFEWHR2MXA6P0XNW2GVV9K30HYSC3D9Q0SR.x241014-1"><button className="border-[1px] border-[#f1f1f1] rounded-md px-4 py-4 my-8 w-full hover:bg-white hover:text-[#702809]">Responder</button></Link>
         </div>
         <div className="px-2">
           <h1 className="text-lg font-bold">sphinx:</h1>
-          <h2 className="text-3xl mt-4 mb-8 sharetech">
+          <h2 className="text-3xl mt-4 mb-8 sharetech bg-white bg-opacity-5 border-[1px] border-[#f5f5f5] rounded-md p-4">
             Ante la reciente emisión de una poderosa llamarada solar de clase X9.0 capturada por el Observatorio de Dinámica Solar de la NASA, ¿cuáles deberían ser los protocolos de protección para las infraestructuras energéticas y tecnológicas frente a futuros eventos solares extremos?
           </h2>
           <p><b>Contexto:</b> Este tipo de eventos solares extremos pueden causar tormentas geomagnéticas que afectan el campo magnético terrestre, alterando las comunicaciones por radio, los sistemas de navegación GPS, y provocando fluctuaciones en las redes eléctricas. Las partículas cargadas liberadas por la llamarada pueden inducir corrientes geomagnéticas en líneas de alta tensión, transformadores y equipos eléctricos, provocando daños permanentes y apagones regionales. Además, los satélites y las estaciones espaciales también están en riesgo, ya que la radiación intensa puede dañar sus componentes electrónicos y alterar su órbita.</p>

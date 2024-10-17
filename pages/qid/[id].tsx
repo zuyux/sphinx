@@ -1,159 +1,223 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { 
-    callReadOnlyFunction, makeStandardSTXPostCondition, stringUtf8CV, cvToJSON,
-    AnchorMode, FungibleConditionCode 
+import {
+  makeContractCall,
+  broadcastTransaction,
+  AnchorMode,
+  bufferCVFromString,
+  callReadOnlyFunction,
+  cvToJSON
 } from '@stacks/transactions';
 import axios from 'axios';
-import { openContractCall } from '@stacks/connect';
 import { StacksTestnet } from '@stacks/network';
+import { AppConfig, UserSession, showConnect } from '@stacks/connect';
+import { supabase } from '../../supabase';
+import '@/app/locals.css'
 
-// Interface for the metadata
+const network = new StacksTestnet(); // Using the testnet
+
+// Interface for metadata (question and context)
 interface QuestionMetadata {
   question: string;
   context: string;
-  contractAddress: string;
-  txid: string;
 }
 
-const network = new StacksTestnet();
+// Define the expected type for user data
+interface UserData {
+  profile: {
+    stxAddress: {
+      testnet: string;
+    };
+  };
+  name?: string; 
+  image?: string; 
+}
+
+const appConfig = new AppConfig(['store_write', 'publish_data']);
+const userSession = new UserSession({ appConfig });
 
 export default function Quest() {
   const router = useRouter();
-  const { txid } = router.query; // Get the TXID from the URL
+  const { id } = router.query; // Get the contract_id from the URL
   const [metadata, setMetadata] = useState<QuestionMetadata | null>(null);
-  const [response, setResponse] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [response, setResponse] = useState(''); // User response state
 
-  // Fetch the contract address based on the TXID when the page loads
-  useEffect(() => {
-    if (txid) {
-      fetchContractAddressFromTxid(txid as string);
-    }
-  }, [txid]);
-
-  // Fetch the contract address from the TXID using the Stacks API
-  async function fetchContractAddressFromTxid(txid: string) {
-    try {
-      const response = await axios.get(
-        `https://stacks-node-api.testnet.stacks.co/extended/v1/tx/${txid}`
-      );
-
-      const contractAddress = response.data.smart_contract?.contract_id;
-      if (contractAddress) {
-        fetchQuestionMetadata(contractAddress, txid); // Fetch metadata using contract address
-      } else {
-        console.error('Contract address not found for this TXID.');
-      }
-    } catch (error) {
-      console.error('Error fetching contract address from TXID:', error);
-    }
-  }
-
-  // Fetch the question metadata from the contract
-  async function fetchQuestionMetadata(contractAddress: string, txid: string) {
+  const fetchMetadataFromContract = useCallback(async (contractAddress: string) => {
     try {
       const [contractAddr, contractName] = contractAddress.split('.');
-      const result = await callReadOnlyFunction({
+      const options = {
         contractAddress: contractAddr,
-        contractName: contractName,
-        functionName: 'get-question-details',
+        contractName,
+        functionName: 'get-metadata',
         functionArgs: [],
         network,
         senderAddress: 'ST28B2GFEWHR2MXA6P0XNW2GVV9K30HYSC3D9Q0SR',
-      });
-
+      };
+    
+      const result = await callReadOnlyFunction(options);
       const data = cvToJSON(result);
-      const ipfsLink = data.value.metadata;
-
-      if (ipfsLink) {
-        const { data: fetchedMetadata } = await axios.get(ipfsLink);
-        setMetadata({
-          ...fetchedMetadata,
-          contractAddress, // Include contract address in metadata
-          txid, // Include TXID for reference
-        });
-      }
+      const ipfsCID = data.value;
+      const cid = ipfsCID.value;
+    
+      const metadata = await fetchMetadataFromProxy(cid);
+      setMetadata(metadata);
     } catch (error) {
-      console.error('Error fetching metadata:', error);
+      console.error('Error fetching metadata from contract:', error);
     }
-  }
+  }, [network]);
 
-  // Function to submit a response
-  async function handleSubmitResponse() {
-    setLoading(true);
-
-    if (!metadata) {
-      console.error('Metadata not loaded');
-      setLoading(false);
-      return;
+  // Fetch the metadata when the page loads
+  useEffect(() => {
+    if (id) {
+      fetchMetadataFromContract(id as string);
     }
+    // Check if there is an active session
+    if (userSession.isUserSignedIn()) {
+      const userData = userSession.loadUserData() as UserData;
+      setUserData(userData);
+    } else if (userSession.isSignInPending()) {
+      userSession.handlePendingSignIn().then((userData: UserData) => {
+        setUserData(userData as UserData);
+      });
+    }
+  }, [id, fetchMetadataFromContract]);
 
-    const [contractAddress, contractName] = metadata.contractAddress.split('.');
+  const connectWallet = () => {
+    showConnect({
+      appDetails: {
+        name: 'Sphinx',
+        icon: 'https://sphinx-brown.vercel.app/icon.png',
+      },
+      userSession,
+      onFinish: async () => {
+        const userData = userSession.loadUserData() as UserData;
+        setUserData(userData);
+        const walletAddress = userData.profile.stxAddress.testnet;
 
-    const options = {
-      contractAddress,
-      contractName,
-      functionName: 'submit-response',
-      functionArgs: [stringUtf8CV(response)],
-      network,
-      postConditions: [
-        makeStandardSTXPostCondition(
-          'ST3J2GVMMM2R07ZFBJDWTYEYAR8FZH5WKDTFJ9AHA',
-          FungibleConditionCode.GreaterEqual,
-          1e6 // 1 STX in micro-STX
-        ),
-      ],
-      anchorMode: AnchorMode.Any,
-    };
+        // Save user data to Supabase if not already registered
+        const { data, error } = await supabase
+          .from('sph_users')
+          .select('*')
+          .eq('add', walletAddress);
 
+        if (error) return console.error('Error checking user:', error);
+
+        if (data && data.length === 0) {
+          const { error: insertError } = await supabase.from('sph_users').insert([
+            {
+              add: walletAddress,
+              name: userData.name || 'nony',
+              pic: userData.image || null,
+            },
+          ]);
+          if (insertError) console.error('Error inserting user:', insertError);
+          else console.log('User inserted successfully!');
+        }
+      },
+    });
+  };
+
+  // Function to format the address
+  const formatAddress = (address: string) => {
+    if (!address) return '';
+    return `${address.slice(0, 5)}...${address.slice(-3)}`;
+  };
+
+  
+  // Fetch the metadata (IPFS link) from the backend proxy
+  const fetchMetadataFromProxy = async (cid: string) => {
     try {
-      await openContractCall(options);
+      const proxyUrl = `/api/ipfs?cid=${cid}`;
+      const response = await axios.get(proxyUrl);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching metadata from backend proxy:', error);
+      return null;
+    }
+  };
+
+  // Upload response to IPFS
+  const uploadResponseToIPFS = async (responseText: string) => {
+    const metadata = {
+      response: responseText,
+      timestamp: new Date().toISOString(),
+      stxAddress: userSession.loadUserData().profile.stxAddress.testnet, // Fetch the STX address
+    };
+    const result = await axios.post('/api/ipfs-upload', metadata); // Assuming a backend proxy for IPFS upload
+    return result.data.cid; // Get CID from the result
+  };
+
+  // Submit the response to the contract
+  const submitResponse = async () => {
+    try {
+      const ipfsCID = await uploadResponseToIPFS(response); // Upload the response and get the CID
+
+      const txOptions = {
+        contractAddress: 'ST28B2GFEWHR2MXA6P0XNW2GVV9K30HYSC3D9Q0SR',
+        contractName: 'responser241015A',
+        functionName: 'submit-response',
+        functionArgs: [bufferCVFromString(ipfsCID)], // Submit the CID as a buffer
+        senderKey: userSession.loadUserData().appPrivateKey, // Use the user's private key
+        network,
+        anchorMode: AnchorMode.Any,
+      };
+
+      const transaction = await makeContractCall(txOptions);
+      const broadcastResponse = await broadcastTransaction(transaction, network);
+      console.log('Transaction submitted:', broadcastResponse.txid);
       alert('Response submitted successfully!');
-      setResponse('');
     } catch (error) {
       console.error('Error submitting response:', error);
-      alert('Error submitting response.');
-    } finally {
-      setLoading(false);
+      alert('Failed to submit the response.');
     }
-  }
+  };
 
   return (
-    <div style={{ padding: '20px' }}>
-      <h1>Question Details</h1>
-      {!metadata ? (
-        <p>Loading question...</p>
-      ) : (
-        <>
-          <h2>{metadata.question}</h2>
-          <p>{metadata.context}</p>
-          <p>
-            <strong>Contract Address:</strong> {metadata.contractAddress}
-          </p>
-          <p>
-            <strong>TXID:</strong> {metadata.txid}
-          </p>
-        </>
-      )}
+    <div>
+      <div>
+        <Link href="/" className='fixed top-4 left-6 font-bold'>sphinx</Link>
+        <span className='fixed top-5 left-[91px] text-[11px] py-[1px]'>ANSWER TO EARN</span>
+        {userData ? (
+          <Link href={`/avatar/${userData.profile.stxAddress.testnet}`}>
+            <button className="fixed top-4 right-6 text-[11px]">
+              {formatAddress(userData.profile.stxAddress.testnet)}
+            </button>
+          </Link>
+        ) : (
+          <button className="fixed top-4 right-6 text-[11px]" onClick={connectWallet}>
+            CONNECT
+          </button>
+        )}
+      </div>
+      <div className='lg:w-1/3 mx-auto my-8'>
+        <p className='text-[11px] mb-4'>{id}</p>
+        {!metadata ? (
+          <p>Loading question...</p>
+        ) : (
+          <>
+            <h1 className='sharetech font-bold text-3xl mb-4'>{metadata?.question}</h1>
+            <p><b>Context:</b> {metadata?.context}</p>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSubmitResponse();
-        }}
-        style={{ marginTop: '20px' }}
-      >
-        <textarea
-          placeholder="Submit your response..."
-          value={response}
-          onChange={(e) => setResponse(e.target.value)}
-          style={{ width: '100%', height: '100px' }}
-        />
-        <button type="submit" disabled={loading || !response}>
-          {loading ? 'Submitting...' : 'Submit Response (1 STX)'}
-        </button>
-      </form>
+            {/* Add form for response submission */}
+            <textarea
+              className='block w-full mt-4 border rounded-md p-2'
+              placeholder='Write your response here...'
+              value={response}
+              onChange={(e) => setResponse(e.target.value)}
+            />
+            <button
+              className='bg-blue-500 text-white px-4 py-2 mt-4 rounded-md'
+              onClick={submitResponse}
+              disabled={loading}
+            >
+              {loading ? 'Submitting...' : 'Submit Response'}
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
